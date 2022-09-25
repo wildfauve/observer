@@ -1,4 +1,4 @@
-from typing import Tuple, Callable, Protocol
+from typing import Tuple, Callable, Protocol, Union
 import pendulum
 from rdflib import Namespace, URIRef
 from uuid import uuid4
@@ -133,7 +133,7 @@ class Run(Job):
         self.end_time = None
         self.input = None
 
-    def add_trace(self, trace):
+    def add_trace(self, trace: Union[str, URIRef]):
         self.trace = trace
         return self
 
@@ -293,7 +293,7 @@ class ObserverNoopEmitter(Emitter):
 class Observer(Observable):
     """
     An Observer observes the individual Job run.  It holds the run's identity, but does not mediate the components
-    of the run, that is the batches.
+    of the run.
     """
 
     def __init__(self, env: str, job: Job, emitter: Emitter):

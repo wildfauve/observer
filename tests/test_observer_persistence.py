@@ -84,7 +84,7 @@ def create_full_run_from_obs(obs):
 def create_full_run(session):
     run = create_run(session)
     (run.start()
-     .add_trace(URIRef('https://example.com/service/jobs/job/trace_uuid'))
+     .add_trace('https://example.com/service/jobs/job/trace_uuid')
      .has_input(dataset=observer.ObjectStoreFile(location="file_loc"))
      .has_output(dataset=MyOutputHiveTable(table_name="myOutputTable1", fully_qualified_name="myDB.myOutputTable1"))
      .with_state_transition(lambda _s: ("STATE_COMPLETE", "EVENT_COMPLETED"))

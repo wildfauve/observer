@@ -97,7 +97,7 @@ def create_run():
 def create_full_run():
     run = create_run()
     (run.start()
-     .add_trace(observer.uri_ref('https://example.com/service/jobs/job/trace_uuid'))
+     .add_trace('https://example.com/service/jobs/job/trace_uuid')
      .has_input(dataset=observer.ObjectStoreFile(location="file_loc"))
      .has_output(dataset=MyOutputHiveTable(table_name="myOutputTable1", fully_qualified_name="myDB.myOutputTable1"))
      .with_state_transition(lambda _s: ("STATE_COMPLETE", "EVENT_COMPLETED"))

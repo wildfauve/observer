@@ -106,9 +106,6 @@ Now we can go ahead and define the instances of the DataSet and Job types we'll 
 are simply types with an appropriate inherited parent.
 
 ```python
-from observer import observer
-
-
 class RunOfMySparkJob(observer.Run):
     pass
 
@@ -132,8 +129,6 @@ Firstly, we'll get an instance of an `Observer`. We give it an environment strin
 emitter.
 
 ```python
-from observer import observer
-
 obs = observer.observer_factory(env="test", job=observer.SparkJob(), emitter=observer.ObserverNoopEmitter())
 ```
 
@@ -145,17 +140,55 @@ use it to create separate logical run instances as we process each file.
 To create our run we use the observer.
 
 ```python
-from observer import observer
-
-
-class RunOfMySparkJob(observer.Run):
-    pass
-
-
-obs = observer.observer_factory(env="test", job=observer.SparkJob(), emitter=observer.ObserverNoopEmitter())
-
 run = obs.run_factory(RunOfMySparkJob)
 ```
+
+Now we have a run which we can use to capture observability events.  We'll look at that next.
+
+## Observable Events
+
+The following events can be provided to an instance of a run.  Each event is a method on the run.
+
++ `start`.  No args.  Sets the time (in UTC) indicating the start of the run.
++ `complete`.  No args.  Sets the time (in UTC) of the end of the run.
++ `has_input`.  An instance of a `DataSet` type.  Indicates that the run consumes a dataset.
++ `has_output`. An instance of a `DataSet` type.  Indicates that the run produces a dataset.
++ `has_trace`. A string or URI (use the `observer.uri_ref` builder).  An opaque identifier used for tracing either the run itself or, in a distributed tracing pipeline, the pipeline identity provided by the pipeline.
++ `with_state_transition`.  A Callable that takes the current state of the run and emits a `Tuple[str, str]` containing the new_state and the state transition event.  The run maintains a simple state transition history of states and transitions.  The callable is a higher order function which transitions the run state.  The state transition is saved as history and (possibly) emitted by the Emitter.
+
+Let's see these in action:
+
+```python
+# Start the run.
+run.start()
+
+# Provide a trace
+run.add_trace('https://example.com/service/jobs/job/trace_uuid')
+
+# Process an input dataset
+run.has_input(dataset=observer.ObjectStoreFile(location="/folder/object1"))
+
+# Produce an output
+run.has_output(dataset=MyOutputHiveTable(table_name="myOutputTable1", fully_qualified_name="myDB.myOutputTable1"))
+
+# Transition the state to complete via the completed event 
+run.with_state_transition(lambda _s: ("STATE_COMPLETE", "EVENT_COMPLETED"))
+
+# Finally complete the run
+run.complete()
+```
+
+Notice we haven't emitted anything yet.  There are 2 options here, the first is to complete and emit the individual run.  The second is to use the observer to emit the run.  Admittedly we're using a Noop emitter, but let's emit the run data anyway.
+
+```python
+# Complete and emit at the same time
+run.complete_and_emit()
+
+# Emit using the observer
+obs.emit()
+```
+
+
 
 ## Emitters
 
