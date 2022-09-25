@@ -1,4 +1,4 @@
-from typing import Tuple, Callable, Protocol, Union
+from typing import Tuple, Callable, Protocol, Union, Optional
 import pendulum
 from rdflib import Namespace, URIRef
 from uuid import uuid4
@@ -21,7 +21,18 @@ class Observable:
     def __init__(self):
         pass
 
-    def uriref_to_str(self, ref: URIRef) -> str:
+    @staticmethod
+    def coerce_uri(uri: URIRef) -> Optional[str]:
+        if isinstance(uri, Namespace):
+            return str(uri)
+        if isinstance(uri, URIRef):
+            return Observable.uriref_to_str(uri)
+        if hasattr(uri, 'toPython'):
+            return uri.toPython()
+        return uri if isinstance(uri, str) else None
+
+    @staticmethod
+    def uriref_to_str(ref: URIRef) -> str:
         return ref.toPython()
 
 
@@ -58,8 +69,8 @@ class HiveTable(Hive):
 
     def to_props(self):
         return (
-            self.uriref_to_str(self.identity()),
-            self.uriref_to_str(self.type_of),
+            self.coerce_uri(self.identity()),
+            self.coerce_uri(self.type_of),
             self.fully_qualified_name,
             self.table_name
         )
@@ -89,8 +100,8 @@ class ObjectStoreFile(ObjectStore):
 
     def to_props(self):
         return (
-            self.uriref_to_str(self.identity()),
-            self.uriref_to_str(self.type_of),
+            self.coerce_uri(self.identity()),
+            self.coerce_uri(self.type_of),
             self.location,
             None  # name
         )
@@ -223,10 +234,10 @@ class Run(Job):
 
     def to_props(self):
         run_cell = structure.Cell(column=RunColumn, props=(
-            self.uriref_to_str(self.identity()),
-            self.uriref_to_str(self.job.type_of),
-            str(self.job_identity()),
-            self.uriref_to_str(self.trace) if self.trace else None,
+            self.coerce_uri(self.identity()),
+            self.coerce_uri(self.job.type_of),
+            self.coerce_uri(self.job_identity()),
+            self.coerce_uri(self.trace) if self.trace else None,
             self.start_time.to_iso8601_string() if self.start_time else None,
             self.end_time.to_iso8601_string() if self.end_time else None,
             self.current_state))
@@ -243,7 +254,7 @@ class Run(Job):
         Trace: {sp}
         StateTransitions: {stt}
         """.format(uuid=self.uuid,
-                   idt=self.uriref_to_str(self.identity()),
+                   idt=self.coerce_uri(self.identity()),
                    jid=self.job_identity(),
                    st=self.start_time,
                    et=self.end_time,
@@ -257,6 +268,7 @@ class Run(Job):
         obs_data = self.parent_observer.serialise() if self.parent_observer else {}
         return {**{'trace_id': self.trace_id()}, **obs_data}
 
+
 class Emitter(Protocol):
 
     def __init__(self, session: pyspark.sql.session):
@@ -264,6 +276,7 @@ class Emitter(Protocol):
 
     def emit(self) -> monad.EitherMonad:
         ...
+
 
 class ObserverHiveEmitter(Emitter):
 
@@ -296,6 +309,8 @@ class Observer(Observable):
     of the run.
     """
 
+    runs = []
+
     def __init__(self, env: str, job: Job, emitter: Emitter):
         self.env = env
         self.job = job
@@ -309,7 +324,7 @@ class Observer(Observable):
         if run:
             self.emitter.emit(run)
         else:
-            self.emitter.emit(self.run)
+            self.emitter.emit(self.run[0])
         return self
 
     def observer_identity(self):
@@ -319,17 +334,17 @@ class Observer(Observable):
         return self.observer_identity().term(self.trace_id)
 
     def run_factory(self, run):
-        self.run = run(job=self.job, parent_observer=self)
-        return self.run
+        observable_run = run(job=self.job, parent_observer=self)
+        self.runs.append(observable_run)
+        return observable_run
 
     def serialise(self):
         """
         Required for the logger interface
         """
         return {'env': self.env,
-                'trace_id': self.uriref_to_str(self.identity()),
+                'trace_id': self.coerce_uri(self.identity()),
                 'time': pendulum.now().to_iso8601_string()}
-
 
 
 def observer_factory(env: str, job: Job, emitter: Emitter) -> Observer:
@@ -346,6 +361,7 @@ def define_namespace(cls, uri: str) -> None:
 
 def ns(uri: str) -> Namespace:
     return Namespace(uri)
+
 
 def uri_ref(uri: str) -> URIRef:
     return URIRef(uri)
