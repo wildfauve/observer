@@ -1,11 +1,12 @@
-from typing import Tuple, Callable
+from typing import Tuple, Callable, Protocol
 import pendulum
 from rdflib import Namespace, URIRef
 from uuid import uuid4
 from functools import reduce
+import pyspark
 
 from observer import repo
-from observer.util import error, monad
+from observer.util import error, monad, validate
 from observer.domain import schema, metrics, structure
 
 RunColumn = structure.Column(schema=schema.Run)
@@ -28,20 +29,32 @@ class DataSet(Observable):
     type_of = None
 
 
-class HiveTable(DataSet):
-    type_of = Observable.sfo_lin.HiveTable
-    dataset_identity = None
+class Hive(DataSet):
+    dataset_namespace = None
 
     @classmethod
-    def namespace(cls, ns):
-        cls.dataset_identity = ns
+    def namespace(cls, namespace):
+        cls.dataset_namespace = namespace
+        return cls
+
+    def namespace_uri(self):
+        if not isinstance(self.dataset_namespace, Namespace):
+            raise error.ObserverConfigError("Namespace not configured and not configured with correct type")
+        return self.dataset_namespace
+
+
+class HiveTable(Hive):
+    type_of = Observable.sfo_lin.HiveTable
 
     def __init__(self, table_name, fully_qualified_name):
         self.table_name = table_name
         self.fully_qualified_name = fully_qualified_name
 
+    def dataset_identity(self):
+        return self.namespace_uri()
+
     def identity(self):
-        return self.dataset_identity.term(self.fully_qualified_name)
+        return self.dataset_identity().term(self.fully_qualified_name)
 
     def to_props(self):
         return (
@@ -52,23 +65,27 @@ class HiveTable(DataSet):
         )
 
 
-class StoreFileLocation(DataSet):
-    type_of = Observable.sfo_lin.AzureDataLakeStoreFile
-    dataset_identity = None
-
+class ObjectStore(DataSet):
     @classmethod
-    def namespace(cls, ns):
-        cls.dataset_identity = ns
+    def namespace(cls, namespace):
+        cls.dataset_namespace = namespace
+        return cls
+
+    def dataset_identity(self):
+        return self.namespace_uri()
+
+    pass
 
 
-class StoreFile(StoreFileLocation):
+class ObjectStoreFile(ObjectStore):
+    type_of = Observable.sfo_lin.AzureDataLakeStoreFile
 
     def __init__(self, location):
         self.uuid = str(uuid4())
         self.location = location
 
     def identity(self):
-        return self.dataset_identity.term(self.uuid)
+        return self.dataset_namespace.term(self.uuid)
 
     def to_props(self):
         return (
@@ -80,22 +97,27 @@ class StoreFile(StoreFileLocation):
 
 
 class Job(Observable):
-    job_identity = None
+    job_namespace = None
 
     @classmethod
     def namespace(cls, ns):
-        cls.job_identity = ns
+        cls.job_namespace = ns
+
+    def namespace_uri(self):
+        if not isinstance(self.job_namespace, Namespace):
+            raise error.ObserverConfigError("Namespace not configured and not configured with correct type")
+        return self.job_namespace
 
 
 class SparkJob(Job):
     type_of = Observable.sfo_lin.SparkJob
 
 
-class Run(Observable):
+class Run(Job):
     """
-    A Spark job has the ability to process 0 or more batch filestructure.  Each batch file process is an instance of a "Run".
-    Each batch file contains trace (causal id) data.  While a Spark job may process many files, each file is not necessarily from
-    the same trace, hence why the batch is the unit of work.
+    A Spark job has the ability to process 0 or more batches or streams.  Each dataset process is an instance of a "Run".
+    Each dataset contains trace (causal id) data.  While a Spark job may process many files, each file is not
+    necessarily from the same trace, hence why the batch is the unit of work.
     """
 
     def __init__(self, job, parent_observer=None):
@@ -128,8 +150,13 @@ class Run(Observable):
         self.end_time = pendulum.now('UTC')
         return self
 
+    def complete_and_emit(self):
+        self.end_time = pendulum.now('UTC')
+        self.parent_observer.emit()
+        return self
+
     def job_identity(self):
-        return self.job.job_identity
+        return self.job.namespace_uri()
 
     def identity(self):
         return self.job_identity().term(self.uuid)
@@ -230,49 +257,15 @@ class Run(Observable):
         obs_data = self.parent_observer.serialise() if self.parent_observer else {}
         return {**{'trace_id': self.trace_id()}, **obs_data}
 
+class Emitter(Protocol):
 
-class Observer(Observable):
-    """
-    An Observer observes the individual Job run.  It holds the run's identity, but does not mediate the components
-    of the run, that is the batches.
-    """
+    def __init__(self, session: pyspark.sql.session):
+        ...
 
-    def __init__(self, env, job: Job, emitter):
-        self.env = env
-        self.job = job
-        self.trace_id = str(uuid4())
-        self.emitter = emitter
-        self.run = None
+    def emit(self) -> monad.EitherMonad:
+        ...
 
-    def emit(self, run: Run = None):
-        if not self.emitter:
-            return self
-        if run:
-            self.emitter.emit(run)
-        else:
-            self.emitter.emit(self.run)
-        return self
-
-    def observer_identity(self):
-        return self.job.job_identity
-
-    def identity(self):
-        return self.observer_identity().term(self.trace_id)
-
-    def run_factory(self, run):
-        self.run = run(job=self.job, parent_observer=self)
-        return self.run
-
-    def serialise(self):
-        """
-        Required for the logger interface
-        """
-        return {'env': self.env,
-                'trace_id': self.uriref_to_str(self.identity()),
-                'time': pendulum.now().to_iso8601_string()}
-
-
-class ObserverHiveEmitter:
+class ObserverHiveEmitter(Emitter):
 
     def __init__(self, session):
         if not self.session_is_spark_session(session):
@@ -290,12 +283,69 @@ class ObserverHiveEmitter:
         return hasattr(session, 'createDataFrame')
 
 
-class ObserverNoopEmitter:
+class ObserverNoopEmitter(Emitter):
 
     @monad.monadic_try(error_cls=error.ObserverError)
     def emit(self, run: Run):
         pass
 
 
-def observer_factory(env, job, emitter) -> Observer:
+class Observer(Observable):
+    """
+    An Observer observes the individual Job run.  It holds the run's identity, but does not mediate the components
+    of the run, that is the batches.
+    """
+
+    def __init__(self, env: str, job: Job, emitter: Emitter):
+        self.env = env
+        self.job = job
+        self.trace_id = str(uuid4())
+        self.emitter = emitter
+        self.run = None
+
+    def emit(self, run: Run = None):
+        if not self.emitter:
+            return self
+        if run:
+            self.emitter.emit(run)
+        else:
+            self.emitter.emit(self.run)
+        return self
+
+    def observer_identity(self):
+        return self.job.namespace_uri()
+
+    def identity(self):
+        return self.observer_identity().term(self.trace_id)
+
+    def run_factory(self, run):
+        self.run = run(job=self.job, parent_observer=self)
+        return self.run
+
+    def serialise(self):
+        """
+        Required for the logger interface
+        """
+        return {'env': self.env,
+                'trace_id': self.uriref_to_str(self.identity()),
+                'time': pendulum.now().to_iso8601_string()}
+
+
+
+def observer_factory(env: str, job: Job, emitter: Emitter) -> Observer:
     return Observer(env=env, job=job, emitter=emitter)
+
+
+def define_namespace(cls, uri: str) -> None:
+    if not cls in [SparkJob, Hive, ObjectStore]:
+        raise error.ObserverConfigError("Namespace must be configured on SparkJob, Hive, or ObjectStore")
+    if not validate.valid_uri(uri):
+        raise error.ObserverConfigError("Namespace must be a valid URI")
+    cls.namespace(ns(uri))
+
+
+def ns(uri: str) -> Namespace:
+    return Namespace(uri)
+
+def uri_ref(uri: str) -> URIRef:
+    return URIRef(uri)

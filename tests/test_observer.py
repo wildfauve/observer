@@ -1,9 +1,9 @@
-from rdflib import Namespace, URIRef
+from rdflib import URIRef, Namespace
 
 from observer import observer
 
 
-class RunOfTestType(observer.Run):
+class RunOfMySparkJob(observer.Run):
     pass
 
 
@@ -16,9 +16,9 @@ class MyOutputHiveTable(observer.HiveTable):
 
 
 def setup_module():
-    observer.Job.namespace(Namespace('https://example.nz/service/jobs/job/'))
-    observer.HiveTable.namespace(Namespace('https://example.nz/service/datasets/dataset/'))
-    observer.StoreFileLocation.namespace(Namespace('https://example.nz/service/datasets/batchFile/'))
+    observer.define_namespace(observer.Hive, 'https://example.nz/service/datasets/dataset/')
+    observer.define_namespace(observer.SparkJob, 'https://example.nz/service/jobs/job/')
+    observer.define_namespace(observer.ObjectStore, 'https://example.nz/service/datasets/batchFile/')
 
 
 def it_creates_an_observable():
@@ -32,7 +32,7 @@ def it_creates_an_observable():
 def it_created_a_run_from_the_observer():
     obs = create_obs()
 
-    job_run = obs.run_factory(RunOfTestType)
+    job_run = obs.run_factory(RunOfMySparkJob)
 
     assert "https://example.nz/service/jobs/job/" in str(job_run.identity())
 
@@ -91,14 +91,14 @@ def create_obs():
 
 
 def create_run():
-    return create_obs().run_factory(RunOfTestType)
+    return create_obs().run_factory(RunOfMySparkJob)
 
 
 def create_full_run():
     run = create_run()
     (run.start()
-     .add_trace(URIRef('https://example.com/service/jobs/job/trace_uuid'))
-     .has_input(dataset=observer.StoreFile(location="file_loc"))
+     .add_trace(observer.uri_ref('https://example.com/service/jobs/job/trace_uuid'))
+     .has_input(dataset=observer.ObjectStoreFile(location="file_loc"))
      .has_output(dataset=MyOutputHiveTable(table_name="myOutputTable1", fully_qualified_name="myDB.myOutputTable1"))
      .with_state_transition(lambda _s: ("STATE_COMPLETE", "EVENT_COMPLETED"))
      .complete())

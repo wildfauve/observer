@@ -12,6 +12,7 @@ rdflib = "^6.2.0"
 PyMonad = "^2.4.0"
 pyspark = "^3.3.0"
 delta-spark = "^2.1.0"
+validators = "^0.20.0"
 
 
 [tool.poetry.group.dev.dependencies]
