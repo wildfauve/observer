@@ -216,3 +216,32 @@ emitter = observer.ObserverHiveEmitter(session=spark_session,
 
 ```
 
+The schema of the observer table is as follows:
+
+```text
+root
+ |-- run: struct (nullable = true)
+ |    |-- id: string (nullable = true)
+ |    |-- type: string (nullable = true)
+ |    |-- isRunOf: string (nullable = true)
+ |    |-- hasTrace: string (nullable = true)
+ |    |-- hasStartTime: string (nullable = true)
+ |    |-- hasEndTime: string (nullable = true)
+ |    |-- hasRunState: string (nullable = true)
+ |-- hasInputs: array (nullable = true)
+ |    |-- element: struct (containsNull = true)
+ |    |    |-- id: string (nullable = true)
+ |    |    |-- type: string (nullable = true)
+ |    |    |-- hasLocation: string (nullable = true)
+ |    |    |-- hasName: string (nullable = true)
+ |-- hasOutputs: array (nullable = true)
+ |    |-- element: struct (containsNull = true)
+ |    |    |-- id: string (nullable = true)
+ |    |    |-- type: string (nullable = true)
+ |    |    |-- hasLocation: string (nullable = true)
+ |    |    |-- hasName: string (nullable = true)
+ |-- hasMetrics: array (nullable = true)
+ |    |-- element: string (containsNull = true)
+```
+
+## Metrics

@@ -1,4 +1,4 @@
-from typing import List, Tuple, Callable, Protocol, Union, Optional
+from typing import List, Tuple, Callable, Protocol, Union, Optional, Any
 import pendulum
 from rdflib import Namespace, URIRef
 from uuid import uuid4
@@ -290,6 +290,9 @@ class Emitter(Protocol):
     def emit(self) -> monad.EitherMonad:
         ...
 
+    def read(self) -> Optional[Any]:
+        ...
+
 
 class ObserverHiveEmitter(Emitter):
 
@@ -309,6 +312,8 @@ class ObserverHiveEmitter(Emitter):
         self.emitted_map.update(unemitted_runs)
         return result
 
+    def read(self):
+        return self.repo.read()
 
     def run_rows(self, runs):
         return [run.to_table() for run in runs]
@@ -325,6 +330,9 @@ class ObserverNoopEmitter(Emitter):
     @monad.monadic_try(error_cls=error.ObserverError)
     def emit(self, runs: List[Run]):
         pass
+
+    def read(self):
+        return None
 
 
 class Observer(Observable):
@@ -348,6 +356,9 @@ class Observer(Observable):
         else:
             self.emitter.emit(self.runs)
         return self
+
+    def read(self):
+        return self.emitter.read()
 
     def observer_identity(self):
         return self.job.namespace_uri()

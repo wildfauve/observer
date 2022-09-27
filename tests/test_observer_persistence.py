@@ -95,7 +95,7 @@ def it_emits_multiple_inputs_and_outputs(spark_session_for_testing_fixture, init
 
     job_run.complete_and_emit()
 
-    df = emitter.repo.read()
+    df = obs.read()
 
     row = df.select(df.hasInputs, df.hasOutputs).collect()[0]
 
@@ -122,7 +122,7 @@ def it_builds_multiple_rows_from_multiple_runs(spark_session_for_testing_fixture
 
     obs.emit()
 
-    df = emitter.repo.read()
+    df = obs.read()
 
     assert df.count() == 2
 
@@ -142,7 +142,7 @@ def it_idempotently_emits_runs(spark_session_for_testing_fixture, init_db):
 
     obs.emit()
 
-    df = emitter.repo.read()
+    df = obs.read()
 
     assert df.count() == 2
 
