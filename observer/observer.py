@@ -1,4 +1,4 @@
-from typing import Tuple, Callable, Protocol, Union, Optional
+from typing import List, Tuple, Callable, Protocol, Union, Optional
 import pendulum
 from rdflib import Namespace, URIRef
 from uuid import uuid4
@@ -10,7 +10,7 @@ from observer.util import error, monad, validate
 from observer.domain import schema, metrics, structure
 
 RunColumn = structure.Column(schema=schema.Run)
-InputsColumn = structure.Column(schema=schema.InputStorageDataSet)
+InputsColumn = structure.Column(schema=schema.InputsStorageDataSet)
 OutputsColumn = structure.Column(schema=schema.OutputsStorageDataSet)
 MetricsColumn = structure.Column(schema=schema.Metrics)
 
@@ -138,11 +138,21 @@ class Run(Job):
         self.parent_observer = parent_observer
         self.current_state = None
         self.state_transitions = []
+        self.inputs = []
         self.outputs = []
         self.metrics = {}
         self.start_time = None
         self.end_time = None
         self.input = None
+
+    def __key(self):
+        return (self.identity,)
+
+    def __eq__(self, other):
+        return self.__key == other.__key
+
+    def __hash__(self):
+        return hash(self.__key())
 
     def add_trace(self, trace: Union[str, URIRef]):
         self.trace = trace
@@ -163,7 +173,7 @@ class Run(Job):
 
     def complete_and_emit(self):
         self.end_time = pendulum.now('UTC')
-        self.parent_observer.emit()
+        self.parent_observer.emit([self])
         return self
 
     def job_identity(self):
@@ -173,7 +183,11 @@ class Run(Job):
         return self.job_identity().term(self.uuid)
 
     def has_input(self, dataset: DataSet):
-        self.input = dataset
+        self.inputs.append(dataset)
+        return self
+
+    def has_output(self, dataset: DataSet):
+        self.outputs.append(dataset)
         return self
 
     def with_state_transition(self, transition_fn: Callable):
@@ -182,12 +196,8 @@ class Run(Job):
         self.current_state = new_current_state
         return self
 
-    def has_output(self, dataset: DataSet):
-        self.outputs.append(dataset)
-        return self
-
-    def input_as_props(self) -> Tuple:
-        return (structure.Cell(column=InputsColumn, props=self.input.to_props())),
+    def inputs_as_props(self) -> Tuple:
+        return (structure.Cell(column=InputsColumn, props=[inp.to_props() for inp in self.inputs])),
 
     def outputs_as_props(self):
         return (structure.Cell(column=OutputsColumn, props=[output.to_props() for output in self.outputs])),
@@ -229,10 +239,13 @@ class Run(Job):
     def build_rows(self, rows):
         return [tuple(cell.props for cell in row) for row in rows]
 
-    def to_table(self):
-        return self.build_rows([self.to_props()])
+    def build_row(self, cells):
+        return tuple(cell.props for cell in cells)
 
-    def to_props(self):
+    def to_table(self):
+        return self.build_row(self.to_cells())
+
+    def to_cells(self):
         run_cell = structure.Cell(column=RunColumn, props=(
             self.coerce_uri(self.identity()),
             self.coerce_uri(self.job.type_of),
@@ -242,7 +255,7 @@ class Run(Job):
             self.end_time.to_iso8601_string() if self.end_time else None,
             self.current_state))
 
-        return (run_cell,) + self.input_as_props() + self.outputs_as_props() + self.collect_metrics()
+        return (run_cell,) + self.inputs_as_props() + self.outputs_as_props() + self.collect_metrics()
 
     def __str__(self):
         return """
@@ -280,17 +293,28 @@ class Emitter(Protocol):
 
 class ObserverHiveEmitter(Emitter):
 
-    def __init__(self, session):
+    def __init__(self, session, db_name: str, table_name: str, table_format: str):
+        self.emitted_map = set()
         if not self.session_is_spark_session(session):
             raise error.ObserverConfigError('Session provided is not a Spark Session.  Reconfigure Hive Emitter')
-        self.repo = repo.REPO(repo.DB.init_session(session, repo.CONFIG))
+        self.repo = repo.REPO(repo.DB.init_session(session=session,
+                                                   table_format=table_format,
+                                                   db_name=db_name,
+                                                   table_name=table_name))
 
     @monad.monadic_try(error_cls=error.ObserverError)
-    def emit(self, run: Run):
-        return self.repo.upsert(self.create_df(run))
+    def emit(self, runs: List[Run]):
+        unemitted_runs = set(runs) ^ self.emitted_map
+        result = self.repo.upsert(self.create_df(unemitted_runs))
+        self.emitted_map.update(unemitted_runs)
+        return result
 
-    def create_df(self, run: Run):
-        return self.repo.create_df(run.to_table(), schema.schema)
+
+    def run_rows(self, runs):
+        return [run.to_table() for run in runs]
+
+    def create_df(self, runs: List[Run]):
+        return self.repo.create_df(self.run_rows(runs), schema.schema)
 
     def session_is_spark_session(self, session):
         return hasattr(session, 'createDataFrame')
@@ -299,7 +323,7 @@ class ObserverHiveEmitter(Emitter):
 class ObserverNoopEmitter(Emitter):
 
     @monad.monadic_try(error_cls=error.ObserverError)
-    def emit(self, run: Run):
+    def emit(self, runs: List[Run]):
         pass
 
 
@@ -309,22 +333,20 @@ class Observer(Observable):
     of the run.
     """
 
-    runs = []
-
     def __init__(self, env: str, job: Job, emitter: Emitter):
         self.env = env
         self.job = job
         self.trace_id = str(uuid4())
         self.emitter = emitter
-        self.run = None
+        self.runs = []
 
-    def emit(self, run: Run = None):
+    def emit(self, runs: List[Run] = []):
         if not self.emitter:
             return self
-        if run:
-            self.emitter.emit(run)
+        if runs:
+            self.emitter.emit(runs)
         else:
-            self.emitter.emit(self.run[0])
+            self.emitter.emit(self.runs)
         return self
 
     def observer_identity(self):

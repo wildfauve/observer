@@ -26,8 +26,8 @@ vocab = {
         "sfo-lin:hasStartTime": {"hasDataProductTerm": "hasStartTime"},
         "sfo-lin:hasEndTime": {"hasDataProductTerm": "hasEndTime"},
         "sfo-lin:hasRunState": {"hasDataProductTerm": "hasRunState"},
-        "sfo-lin:hasInput": {
-            "hasDataProductTerm": "hasInput",
+        "sfo-lin:hasInputs": {
+            "hasDataProductTerm": "hasInputs",
             "sfo-lin:hasLocation": {"hasDataProductTerm": "hasLocation"},
             "sfo-lin:hasName": {"hasDataProductTerm": "hasName"}
         },

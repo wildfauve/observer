@@ -4,10 +4,14 @@ import pyspark
 from pyspark.sql import SparkSession
 from delta import *
 
-from observer.util import fn
+from observer.util import fn, singleton
 
+class PysparkTestSession(singleton.Singleton):
+    session = None
+    def config(self, session):
+        self.session = session
 
-@pytest.fixture
+@pytest.fixture(scope='module')
 def spark_session_for_testing_fixture():
     return session(spark_delta_session, spark_session_config)
 
@@ -29,6 +33,7 @@ def spark_delta_session():
 def session(create_fn: Callable = create_session, config_adder_fn: Callable = fn.identity) -> SparkSession:
     sp = create_fn()
     config_adder_fn(sp)
+    PysparkTestSession().config(session=sp)
     return sp
 
 

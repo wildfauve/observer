@@ -15,6 +15,10 @@ class MyOutputHiveTable(observer.HiveTable):
     pass
 
 
+class MyOutputHiveTable2(observer.HiveTable):
+    pass
+
+
 def setup_module():
     observer.define_namespace(observer.Hive, 'https://example.nz/service/datasets/dataset/')
     observer.define_namespace(observer.SparkJob, 'https://example.nz/service/jobs/job/')
@@ -44,7 +48,16 @@ def it_adds_a_run_input():
 
     job_run.has_input(dataset=input_table)
 
-    assert job_run.input.identity() == URIRef('https://example.nz/service/datasets/dataset/myDB.myTable')
+    assert job_run.inputs[0].identity() == URIRef('https://example.nz/service/datasets/dataset/myDB.myTable')
+
+
+def test_run_takes_multiple_inputs():
+    job_run = create_run()
+
+    job_run.has_input(dataset=observer.ObjectStoreFile(location="file_loc"))
+    job_run.has_input(dataset=MyInputHiveTable(table_name="myInputTable1", fully_qualified_name="myDB.myOutputTable1"))
+
+    assert len(job_run.inputs) == 2
 
 
 def it_adds_multiple_run_outputs():
@@ -64,22 +77,32 @@ def it_adds_multiple_run_outputs():
     assert outputs == expected_outputs
 
 
+def it_generates_multiple_runs_from_the_same_observer():
+    obs = create_obs()
+
+    run1 = obs.run_factory(RunOfMySparkJob)
+    run2 = obs.run_factory(RunOfMySparkJob)
+
+    assert obs.runs == [run1, run2]
+
+
 def it_builds_table_from_run():
     job_run = create_full_run()
 
     cells = job_run.to_table()
 
-    assert len(cells) == 1
+    assert len(cells) == 4
 
-    run, inp, outputs, metrics = cells[0]
+    run, inps, outputs, metrics = cells
 
     run_id, job_type, job_id, trace, t1, t2, state = run
-    input_id, input_type, location, _ = inp
+    input_id, input_type, location, _ = inps[0]
     table_id, table_type, db_table_name, table_name = outputs[0]
 
     assert 'https://example.nz/service/jobs/job/' in run_id
     assert 'https://example.nz/service/datasets/batchFile/' in input_id
     assert table_id == 'https://example.nz/service/datasets/dataset/myDB.myOutputTable1'
+
 
 
 #
@@ -90,16 +113,21 @@ def create_obs():
     return observer.observer_factory("test", observer.SparkJob(), emitter)
 
 
-def create_run():
+def create_run(obs=None):
+    if obs:
+        return obs.run_factory(RunOfMySparkJob)
     return create_obs().run_factory(RunOfMySparkJob)
 
 
-def create_full_run():
-    run = create_run()
+def create_full_run(run=None, obs=None):
+    if not run:
+        run = create_run(obs)
     (run.start()
      .add_trace('https://example.com/service/jobs/job/trace_uuid')
      .has_input(dataset=observer.ObjectStoreFile(location="file_loc"))
+     .has_input(dataset=MyInputHiveTable(table_name="myInputTable1", fully_qualified_name="myDB.myInputTable1"))
      .has_output(dataset=MyOutputHiveTable(table_name="myOutputTable1", fully_qualified_name="myDB.myOutputTable1"))
+     .has_output(dataset=MyOutputHiveTable2(table_name="myOutputTable2", fully_qualified_name="myDB.myOutputTable2"))
      .with_state_transition(lambda _s: ("STATE_COMPLETE", "EVENT_COMPLETED"))
      .complete())
 

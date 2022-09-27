@@ -29,15 +29,15 @@ class Observer:
         return self.db.session.createDataFrame(rows, schema)
 
     def upsert(self, df):
-        return (df.write.format(self.db.table_format())
+        return (df.write.format(self.db.table_format)
                 .mode("append")
                 .saveAsTable(self.db_table_name()))
 
     def table_exists(self) -> bool:
-        return self.db.table_exists(self.table_name())
+        return self.db.table_exists()
 
     def db_table_name(self):
-        return self.db.db_table_name(self.config_root)
+        return self.db.db_table_name()
 
     def table_name(self):
-        return self.db.table_name(self.config_root)
+        return self.db.table_name

@@ -5,8 +5,8 @@ from observer.domain import schema_util as su
 ds_input_struct = StructType([
     su.at_id,
     su.at_type,
-    su.build_string_field('run.sfo-lin:hasInput.sfo-lin:hasLocation', nullable=False),
-    su.build_string_field('run.sfo-lin:hasInput.sfo-lin:hasName', nullable=True),
+    su.build_string_field('run.sfo-lin:hasInputs.sfo-lin:hasLocation', nullable=False),
+    su.build_string_field('run.sfo-lin:hasInputs.sfo-lin:hasName', nullable=True),
 ])
 
 ds_output_struct = StructType([
@@ -28,13 +28,13 @@ run_struct = StructType([
 
 Run = su.build_struct_field('run', run_struct, nullable=False)
 
-InputStorageDataSet = su.build_struct_field('run.sfo-lin:hasInput', ds_input_struct, nullable=True)
+InputsStorageDataSet = su.build_array_field('run.sfo-lin:hasInputs', ds_input_struct, nullable=True)
 OutputsStorageDataSet = su.build_array_field('run.sfo-lin:hasOutputs', ds_output_struct, nullable=True)
 Metrics = su.build_array_field('run.sfo-lin:hasMetrics', StringType(), nullable=True)
 
 schema = StructType([
     Run,
-    InputStorageDataSet,
+    InputsStorageDataSet,
     OutputsStorageDataSet,
     Metrics
 ])

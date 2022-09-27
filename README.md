@@ -141,6 +141,9 @@ To create our run we use the observer.
 
 ```python
 run = obs.run_factory(RunOfMySparkJob)
+
+# We can reuse the observer to create another run by invoking...
+run2 = obs.run_factory(RunOfMySparkJob)
 ```
 
 Now we have a run which we can use to capture observability events.  We'll look at that next.
@@ -178,13 +181,13 @@ run.with_state_transition(lambda _s: ("STATE_COMPLETE", "EVENT_COMPLETED"))
 run.complete()
 ```
 
-Notice we haven't emitted anything yet.  There are 2 options here, the first is to complete and emit the individual run.  The second is to use the observer to emit the run.  Admittedly we're using a Noop emitter, but let's emit the run data anyway.
+Notice we haven't emitted anything yet.  There are 2 options here, the first is to complete and emit using the run instance.  This will emit only the individual run, not any other runs which might be known to the observer.  The second is to using the observer instance.  This will emit all the runs known to the observer as rows (if we're using the Hive emitter). Emitting is idempotent; we can't emit the same run twice.  Admittedly we're using a Noop emitter, but let's emit the run data anyway.
 
 ```python
-# Complete and emit at the same time
+# Complete and emit at the same time (which emits only the run)
 run.complete_and_emit()
 
-# Emit using the observer
+# Emit using the observer (which emits all the runs known)
 obs.emit()
 ```
 

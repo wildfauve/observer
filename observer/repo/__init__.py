@@ -1,5 +1,4 @@
-from . import db, observer, config
+from . import db, observer
 
 DB = db.Db
 REPO = observer.Observer
-CONFIG = config.config

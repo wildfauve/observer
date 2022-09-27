@@ -1,10 +1,12 @@
 import pytest
 
+from tests.shared import *
+
 from observer import repo
 
 
 @pytest.fixture
-def init_db():
-    repo.DB.session.sql(f"create database IF NOT EXISTS {repo.DB().database_name()}")
+def init_db(spark_session_for_testing_fixture):
+    spark_session_for_testing_fixture.sql("create database IF NOT EXISTS observerDB")
     yield
-    repo.DB.session.sql(f"drop database IF EXISTS {repo.DB().database_name()} CASCADE")
+    spark_session_for_testing_fixture.sql("drop database IF EXISTS observerDB CASCADE")
