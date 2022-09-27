@@ -146,18 +146,22 @@ run = obs.run_factory(RunOfMySparkJob)
 run2 = obs.run_factory(RunOfMySparkJob)
 ```
 
-Now we have a run which we can use to capture observability events.  We'll look at that next.
+Now we have a run which we can use to capture observability events. We'll look at that next.
 
 ## Observable Events
 
-The following events can be provided to an instance of a run.  Each event is a method on the run.
+The following events can be provided to an instance of a run. Each event is a method on the run.
 
-+ `start`.  No args.  Sets the time (in UTC) indicating the start of the run.
-+ `complete`.  No args.  Sets the time (in UTC) of the end of the run.
-+ `has_input`.  An instance of a `DataSet` type.  Indicates that the run consumes a dataset.
-+ `has_output`. An instance of a `DataSet` type.  Indicates that the run produces a dataset.
-+ `has_trace`. A string or URI (use the `observer.uri_ref` builder).  An opaque identifier used for tracing either the run itself or, in a distributed tracing pipeline, the pipeline identity provided by the pipeline.
-+ `with_state_transition`.  A Callable that takes the current state of the run and emits a `Tuple[str, str]` containing the new_state and the state transition event.  The run maintains a simple state transition history of states and transitions.  The callable is a higher order function which transitions the run state.  The state transition is saved as history and (possibly) emitted by the Emitter.
++ `start`. No args. Sets the time (in UTC) indicating the start of the run.
++ `complete`. No args. Sets the time (in UTC) of the end of the run.
++ `has_input`. An instance of a `DataSet` type. Indicates that the run consumes a dataset.
++ `has_output`. An instance of a `DataSet` type. Indicates that the run produces a dataset.
++ `has_trace`. A string or URI (use the `observer.uri_ref` builder). An opaque identifier used for tracing either the
+  run itself or, in a distributed tracing pipeline, the pipeline identity provided by the pipeline.
++ `with_state_transition`. A Callable that takes the current state of the run and emits a `Tuple[str, str]` containing
+  the new_state and the state transition event. The run maintains a simple state transition history of states and
+  transitions. The callable is a higher order function which transitions the run state. The state transition is saved as
+  history and (possibly) emitted by the Emitter.
 
 Let's see these in action:
 
@@ -181,7 +185,11 @@ run.with_state_transition(lambda _s: ("STATE_COMPLETE", "EVENT_COMPLETED"))
 run.complete()
 ```
 
-Notice we haven't emitted anything yet.  There are 2 options here, the first is to complete and emit using the run instance.  This will emit only the individual run, not any other runs which might be known to the observer.  The second is to using the observer instance.  This will emit all the runs known to the observer as rows (if we're using the Hive emitter). Emitting is idempotent; we can't emit the same run twice.  Admittedly we're using a Noop emitter, but let's emit the run data anyway.
+Notice we haven't emitted anything yet. There are 2 options here, the first is to complete and emit using the run
+instance. This will emit only the individual run, not any other runs which might be known to the observer. The second is
+to using the observer instance. This will emit all the runs known to the observer as rows (if we're using the Hive
+emitter). Emitting is idempotent; we can't emit the same run twice. Admittedly we're using a Noop emitter, but let's
+emit the run data anyway.
 
 ```python
 # Complete and emit at the same time (which emits only the run)
@@ -191,9 +199,20 @@ run.complete_and_emit()
 obs.emit()
 ```
 
-
-
 ## Emitters
 
+There are 2 emitters supported, the `ObserverHiveEmitter` and the `ObserverNoopEmitter`. The Noop emitter, well, does
+nothing!  The Hive emitter writes the run data to a Hive table.
 
+To use the `ObserverHiveEmitter` emitter, we'll need to configure it, and provide it to the `Observer` constructor.
+
+```python
+spark_session = create_spark_session()
+
+emitter = observer.ObserverHiveEmitter(session=spark_session,
+                                       db_name='observerdb',
+                                       table_name='observertable',
+                                       table_format="delta")
+
+```
 
