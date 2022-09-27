@@ -104,6 +104,12 @@ def it_builds_table_from_run():
     assert table_id == 'https://example.nz/service/datasets/dataset/myDB.myOutputTable1'
 
 
+def it_sets_trace_id():
+    job_run = create_full_run()
+
+    assert job_run.trace_id() == "https://example.com/service/jobs/job/trace_uuid"
+
+
 
 #
 #

@@ -161,7 +161,7 @@ class Run(Job):
     def trace_id(self):
         if not self.trace:
             return None
-        return self.coerse_uri(self.trace)
+        return self.coerce_uri(self.trace)
 
     def start(self):
         self.start_time = pendulum.now('UTC')
