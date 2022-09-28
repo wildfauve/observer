@@ -1,5 +1,6 @@
 from typing import Optional
 from pyspark.sql import dataframe, types
+from pyspark.sql import functions as F
 from delta.tables import *
 
 
@@ -20,10 +21,11 @@ class Observer:
         if not df:
             return []
 
+        in_location_fn = (lambda locs: lambda x: x.isin(locs))(input_locations)
+
         return (df.filter(
-            (df.run.hasRunState == run_state) & (df.hasInput.hasLocation.isin(input_locations)))
-                .select(df.hasInput.hasLocation)
-                .collect())
+            (df.run.hasRunState == run_state) & (F.exists(df.hasInputs.hasLocation, in_location_fn)))
+                .select(df.run, df.hasInputs))
 
     def create_df(self, rows, schema):
         return self.db.session.createDataFrame(rows, schema)

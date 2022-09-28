@@ -127,7 +127,6 @@ def it_builds_multiple_rows_from_multiple_runs(spark_session_for_testing_fixture
     assert df.count() == 2
 
 
-
 def it_idempotently_emits_runs(spark_session_for_testing_fixture, init_db):
     emitter = observer.ObserverHiveEmitter(session=spark_session_for_testing_fixture,
                                            db_name='observerdb',
@@ -145,6 +144,27 @@ def it_idempotently_emits_runs(spark_session_for_testing_fixture, init_db):
     df = obs.read()
 
     assert df.count() == 2
+
+
+def test_read_observer_by_state_and_run(spark_session_for_testing_fixture, init_db):
+    emitter = observer.ObserverHiveEmitter(session=spark_session_for_testing_fixture,
+                                           db_name='observerdb',
+                                           table_name='observertable',
+                                           table_format="delta")
+    obs = create_obs(emitter)
+
+    job_run1 = create_full_run(obs)
+    job_run2 = create_full_run(obs)
+
+    obs.emit()
+
+    df = obs.filter_by_inputs_run_state(run_state='STATE_COMPLETE', input_locations=['file_loc'])
+
+    rows = df.select(df.hasInputs.hasLocation).collect()
+
+    assert len(rows) == 2
+    assert [row[0][0] for row in rows] == ['file_loc', 'file_loc']
+
 
 
 

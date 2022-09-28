@@ -4,6 +4,7 @@ from rdflib import Namespace, URIRef
 from uuid import uuid4
 from functools import reduce
 import pyspark
+from pyspark.sql import dataframe
 
 from observer import repo
 from observer.util import error, monad, validate
@@ -293,6 +294,9 @@ class Emitter(Protocol):
     def read(self) -> Optional[Any]:
         ...
 
+    def filter_by_inputs_run_state(self, run_state: str, input_locations: List[str]) -> dataframe.DataFrame:
+        ...
+
 
 class ObserverHiveEmitter(Emitter):
 
@@ -321,6 +325,9 @@ class ObserverHiveEmitter(Emitter):
     def create_df(self, runs: List[Run]):
         return self.repo.create_df(self.run_rows(runs), schema.schema)
 
+    def filter_by_inputs_run_state(self, run_state: str, input_locations: List[str]) -> dataframe.DataFrame:
+        return self.repo.filter_by_inputs_run_state(run_state, input_locations)
+
     def session_is_spark_session(self, session):
         return hasattr(session, 'createDataFrame')
 
@@ -333,6 +340,9 @@ class ObserverNoopEmitter(Emitter):
 
     def read(self):
         return None
+
+    def filter_by_inputs_run_state(self, run_state: str, input_locations: List[str]) -> dataframe.DataFrame:
+        return []
 
 
 class Observer(Observable):
@@ -359,6 +369,10 @@ class Observer(Observable):
 
     def read(self):
         return self.emitter.read()
+
+    def filter_by_inputs_run_state(self, run_state: str, input_locations: List[str]) -> dataframe.DataFrame:
+        return self.emitter.filter_by_inputs_run_state(run_state=run_state, input_locations=input_locations)
+
 
     def observer_identity(self):
         return self.job.namespace_uri()
