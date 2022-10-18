@@ -7,9 +7,10 @@ import pyspark
 from pyspark.sql import dataframe
 
 from observer import repo
-from observer.util import error, monad, validate
+from observer.util import error, monad, validate, logger
 from observer.domain import schema, metrics, structure
 
+RunTimeColumn = structure.Column(schema=schema.RunTime)
 RunColumn = structure.Column(schema=schema.Run)
 InputsColumn = structure.Column(schema=schema.InputsStorageDataSet)
 OutputsColumn = structure.Column(schema=schema.OutputsStorageDataSet)
@@ -142,7 +143,7 @@ class Run(Job):
         self.inputs = []
         self.outputs = []
         self.metrics = {}
-        self.start_time = None
+        self.start_time = pendulum.now(tz='UTC')
         self.end_time = None
         self.input = None
 
@@ -247,6 +248,8 @@ class Run(Job):
         return self.build_row(self.to_cells())
 
     def to_cells(self):
+        run_time_cell = structure.Cell(column=RunTimeColumn, props=self.start_time.to_iso8601_string())
+
         run_cell = structure.Cell(column=RunColumn, props=(
             self.coerce_uri(self.identity()),
             self.coerce_uri(self.job.type_of),
@@ -256,7 +259,7 @@ class Run(Job):
             self.end_time.to_iso8601_string() if self.end_time else None,
             self.current_state))
 
-        return (run_cell,) + self.inputs_as_props() + self.outputs_as_props() + self.collect_metrics()
+        return (run_time_cell, run_cell) + self.inputs_as_props() + self.outputs_as_props() + self.collect_metrics()
 
     def __str__(self):
         return """
@@ -312,6 +315,7 @@ class ObserverHiveEmitter(Emitter):
     @monad.monadic_try(error_cls=error.ObserverError)
     def emit(self, runs: List[Run]):
         unemitted_runs = set(runs) ^ self.emitted_map
+        logger.info('obserer:emit', ctx={'runsToEmit': [r.identity().toPython() for r in unemitted_runs]})
         result = self.repo.upsert(self.create_df(unemitted_runs))
         self.emitted_map.update(unemitted_runs)
         return result
@@ -383,6 +387,8 @@ class Observer(Observable):
     def run_factory(self, run):
         observable_run = run(job=self.job, parent_observer=self)
         self.runs.append(observable_run)
+        logger.info(msg='observer:run_factory', ctx={'runId': observable_run.identity().toPython(),
+                                                     'numberOfRuns': len(self.runs)})
         return observable_run
 
     def serialise(self):

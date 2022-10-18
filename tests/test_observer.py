@@ -91,9 +91,9 @@ def it_builds_table_from_run():
 
     cells = job_run.to_table()
 
-    assert len(cells) == 4
+    assert len(cells) == 5
 
-    run, inps, outputs, metrics = cells
+    run_time, run, inps, outputs, metrics = cells
 
     run_id, job_type, job_id, trace, t1, t2, state = run
     input_id, input_type, location, _ = inps[0]

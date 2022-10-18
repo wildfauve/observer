@@ -38,11 +38,13 @@ def it_persists_the_observer_to_hive_using_emit(spark_session_for_testing_fixtur
 
     df = emitter.repo.read()
 
-    rows = [row[0] for row in df.select(df.run).collect()]
+
+    rows = df.select(df.hasRunTime, df.run).collect()
 
     assert len(rows) == 1
-    assert rows[0].type == 'https://example.nz/ontology/Lineage/SparkJob'
-    assert rows[0].hasTrace == 'https://example.com/service/jobs/job/trace_uuid'
+    assert rows[0].hasRunTime
+    assert rows[0].run.type == 'https://example.nz/ontology/Lineage/SparkJob'
+    assert rows[0].run.hasTrace == 'https://example.com/service/jobs/job/trace_uuid'
 
 
 def it_persists_the_observer_on_completion(spark_session_for_testing_fixture, init_db):
