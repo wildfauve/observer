@@ -30,8 +30,9 @@ class Observer:
     def create_df(self, rows, schema):
         return self.db.session.createDataFrame(rows, schema)
 
-    def upsert(self, df):
+    def upsert(self, df, *partition_columns):
         return (df.write.format(self.db.table_format)
+                .partitionBy(partition_columns)
                 .mode("append")
                 .saveAsTable(self.db_table_name()))
 

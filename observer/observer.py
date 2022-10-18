@@ -316,7 +316,7 @@ class ObserverHiveEmitter(Emitter):
     def emit(self, runs: List[Run]):
         unemitted_runs = set(runs) ^ self.emitted_map
         logger.info('obserer:emit', ctx={'runsToEmit': [r.identity().toPython() for r in unemitted_runs]})
-        result = self.repo.upsert(self.create_df(unemitted_runs))
+        result = self.repo.upsert(self.create_df(unemitted_runs), 'hasRunTime')
         self.emitted_map.update(unemitted_runs)
         return result
 

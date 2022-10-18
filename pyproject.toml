@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "observer"
-version = "0.1.4"
+version = "0.1.5"
 description = ""
 authors = ["Col Perks <wild.fauve@gmail.com>"]
 readme = "README.md"
